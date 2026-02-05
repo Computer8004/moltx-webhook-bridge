@@ -2,8 +2,8 @@
 import { MoltxNotify } from './index.js';
 
 interface CliArgs {
-  apiKey?: string;
-  baseUrl?: string;
+  moltxApiKey?: string;
+  moltbookApiKey?: string;
   pollInterval?: number;
   openclawUrl?: string;
   openclawToken?: string;
@@ -18,13 +18,11 @@ function parseArgs(): CliArgs {
     const arg = argv[i];
     
     switch (arg) {
-      case '--api-key':
-      case '-k':
-        args.apiKey = argv[++i];
+      case '--moltx-key':
+        args.moltxApiKey = argv[++i];
         break;
-      case '--base-url':
-      case '-b':
-        args.baseUrl = argv[++i];
+      case '--moltbook-key':
+        args.moltbookApiKey = argv[++i];
         break;
       case '--poll-interval':
       case '-i':
@@ -46,8 +44,8 @@ function parseArgs(): CliArgs {
   }
 
   // Check environment variables
-  if (!args.apiKey) args.apiKey = process.env.MOLTBOOK_API_KEY;
-  if (!args.baseUrl) args.baseUrl = process.env.MOLTBOOK_BASE_URL;
+  if (!args.moltxApiKey) args.moltxApiKey = process.env.MOLTX_API_KEY;
+  if (!args.moltbookApiKey) args.moltbookApiKey = process.env.MOLTBOOK_API_KEY;
   if (!args.openclawUrl) args.openclawUrl = process.env.OPENCLAW_HOOKS_URL;
   if (!args.openclawToken) args.openclawToken = process.env.OPENCLAW_HOOKS_TOKEN;
   if (!args.pollInterval && process.env.POLL_INTERVAL) {
@@ -61,26 +59,34 @@ function showHelp(): void {
   console.log(`
 🦀 Moltx Notify - Free notification relay for AI agents
 
+Supports both Moltx (moltx.io) and Moltbook (moltbook.com)
+
 Usage: moltx-notify [options]
 
 Options:
-  -k, --api-key <key>          Moltbook API key (required)
-  -b, --base-url <url>         Moltbook base URL (default: https://www.moltbook.com/api/v1)
+  --moltx-key <key>            Moltx API key (moltx.io)
+  --moltbook-key <key>         Moltbook API key (moltbook.com)
   -i, --poll-interval <ms>     Poll interval in ms (default: 30000)
   -o, --openclaw-url <url>     OpenClaw hooks URL (default: http://localhost:18789/hooks)
   -t, --openclaw-token <token> OpenClaw hooks token (optional)
   -h, --help                   Show this help
 
 Environment Variables:
-  MOLTBOOK_API_KEY             Your Moltbook API key
-  MOLTBOOK_BASE_URL            Moltbook API base URL
+  MOLTX_API_KEY                Your Moltx API key (moltx.io)
+  MOLTBOOK_API_KEY             Your Moltbook API key (moltbook.com)
   OPENCLAW_HOOKS_URL           OpenClaw gateway hooks URL
   OPENCLAW_HOOKS_TOKEN         OpenClaw hooks token (if required)
   POLL_INTERVAL                Poll interval in milliseconds
 
 Examples:
-  moltx-notify -k your_api_key_here
-  moltx-notify -k xxx -i 60000 -o http://localhost:18789/hooks
+  # Poll only Moltx
+  moltx-notify --moltx-key xxx
+
+  # Poll only Moltbook
+  moltx-notify --moltbook-key xxx
+
+  # Poll both
+  moltx-notify --moltx-key xxx --moltbook-key yyy
 `);
 }
 
@@ -92,25 +98,25 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  if (!args.apiKey) {
-    console.error('❌ Error: Moltbook API key is required.');
-    console.error('   Get your API key from https://moltbook.com/settings');
-    console.error('   Then run: moltx-notify -k YOUR_API_KEY');
+  if (!args.moltxApiKey && !args.moltbookApiKey) {
+    console.error('❌ Error: At least one API key required.');
+    console.error('   Use --moltx-key for moltx.io');
+    console.error('   Use --moltbook-key for moltbook.com');
     showHelp();
     process.exit(1);
   }
 
   const notify = new MoltxNotify({
-    apiKey: args.apiKey,
-    baseUrl: args.baseUrl,
+    moltxApiKey: args.moltxApiKey,
+    moltbookApiKey: args.moltbookApiKey,
     pollIntervalMs: args.pollInterval,
     openclawUrl: args.openclawUrl,
     openclawToken: args.openclawToken,
     onNotification: (n) => {
-      console.log(`📨 Notification: ${n.type} from ${n.actorName}`);
+      console.log(`📨 [${n.source}] ${n.type} from ${n.actorName}`);
     },
     onMention: (m) => {
-      console.log(`💬 Mention from ${m.authorName}: ${m.content.slice(0, 50)}...`);
+      console.log(`💬 [${m.source}] Mention from ${m.authorName}: ${m.content.slice(0, 50)}...`);
     },
     onError: (err) => {
       console.error('💥 Error:', err.message);

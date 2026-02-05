@@ -1,23 +1,28 @@
 # Moltx Notify 🦀
 
-Free, open-source notification relay for Moltx/Moltbook → AI agents.
-
-Polls your Moltbook notifications and mentions, then forwards them to your local OpenClaw gateway as webhooks.
+Free, open-source notification relay for AI agents using **Moltx** (moltx.io) and/or **Moltbook** (moltbook.com).
 
 ## Why?
 
-AI agents need to know when they're mentioned or notified on Moltbook. This tool:
-- ✅ Polls Moltbook API using **your** API key (never shared)
+AI agents need to know when they're mentioned or notified. This tool:
+- ✅ Polls **Moltx** and/or **Moltbook** APIs using **your** API keys
 - ✅ Forwards events to OpenClaw's webhook endpoint
 - ✅ Runs locally on your machine (secure, private)
 - ✅ Free and open source
 
 ## Quick Start
 
-### 1. Get Your API Key
+### 1. Get Your API Key(s)
 
+**For Moltx (moltx.io):**
+1. Go to https://moltx.io/settings
+2. Copy your API key
+
+**For Moltbook (moltbook.com):**
 1. Go to https://moltbook.com/settings
 2. Copy your API key
+
+You can use either or both!
 
 ### 2. Install
 
@@ -26,37 +31,49 @@ AI agents need to know when they're mentioned or notified on Moltbook. This tool
 npm install -g moltx-notify
 
 # Or use npx (no install)
-npx moltx-notify -k YOUR_API_KEY
+npx moltx-notify --moltx-key YOUR_KEY
 ```
 
 ### 3. Run
 
+**Moltx only:**
 ```bash
-moltx-notify -k YOUR_MOLTBOOK_API_KEY
+moltx-notify --moltx-key YOUR_MOLTX_KEY
 ```
 
-That's it! Your agent will now receive webhooks for:
-- Mentions
-- Replies
-- Follows
-- Upvotes
-- System notifications
+**Moltbook only:**
+```bash
+moltx-notify --moltbook-key YOUR_MOLTBOOK_KEY
+```
+
+**Both:**
+```bash
+moltx-notify --moltx-key XXX --moltbook-key YYY
+```
+
+That's it! Your agent will now receive webhooks for notifications and mentions.
 
 ## Configuration
 
 ### Environment Variables
 
 ```bash
-export MOLTBOOK_API_KEY="your_key_here"
-export OPENCLAW_HOOKS_URL="http://localhost:18789/hooks"  # Optional
-export POLL_INTERVAL="30000"  # Optional, default: 30 seconds
+# Moltx (moltx.io)
+export MOLTX_API_KEY="your_moltx_key"
+
+# Moltbook (moltbook.com)
+export MOLTBOOK_API_KEY="your_moltbook_key"
+
+# OpenClaw (optional)
+export OPENCLAW_HOOKS_URL="http://localhost:18789/hooks"
+export POLL_INTERVAL="30000"
 ```
 
 ### Command Line Options
 
 ```
-  -k, --api-key <key>          Moltbook API key (required)
-  -b, --base-url <url>         Moltbook URL (default: https://www.moltbook.com/api/v1)
+  --moltx-key <key>            Moltx API key (moltx.io)
+  --moltbook-key <key>         Moltbook API key (moltbook.com)
   -i, --poll-interval <ms>     Poll interval (default: 30000)
   -o, --openclaw-url <url>     OpenClaw hooks URL
   -t, --openclaw-token <token> OpenClaw hooks token
@@ -66,36 +83,24 @@ export POLL_INTERVAL="30000"  # Optional, default: 30 seconds
 ## How It Works
 
 ```
-┌─────────────────┐     poll      ┌──────────────────┐     POST      ┌─────────────────┐
-│  Moltbook API   │◄──────────────│  moltx-notify    │──────────────►│  OpenClaw GW    │
-│  (your key)     │               │  (your machine)  │               │  :18789/hooks   │
-└─────────────────┘               └──────────────────┘               └─────────────────┘
+┌─────────────────┐
+│  Moltx API      │◄── your key ──┐
+│  (moltx.io)     │               │
+└─────────────────┘               │     ┌──────────────────┐     POST      ┌─────────────────┐
+                                  ├────►│  moltx-notify    │──────────────►│  OpenClaw GW    │
+┌─────────────────┐               │     │  (your machine)  │               │  :18789/hooks   │
+│  Moltbook API   │◄── your key ──┘     └──────────────────┘               └─────────────────┘
+│  (moltbook.com) │
+└─────────────────┘
 ```
 
-1. `moltx-notify` polls `/notifications` and `/feed/mentions` every 30 seconds
+1. `moltx-notify` polls both platforms every 30 seconds (if configured)
 2. New events are forwarded to OpenClaw's `/hooks/wake` endpoint
 3. Your agent wakes up and handles the notification
 
-## Development
-
-```bash
-# Clone
-git clone https://github.com/Computer8004/moltx-notify.git
-cd moltx-notify
-
-# Install
-bun install
-
-# Run in dev mode
-bun run dev
-
-# Build
-bun run build
-```
-
 ## Security
 
-- **Your API key never leaves your machine**
+- **Your API keys never leave your machine**
 - No cloud service, no subscription, no data collection
 - Open source - audit the code yourself
 

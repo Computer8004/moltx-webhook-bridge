@@ -30,6 +30,25 @@ function parseArgs(): CliArgs {
   // Default command is poll
   if (!args.command) args.command = 'poll';
 
+  // Extract positional args for reply/post commands
+  if (args.command === 'reply' && argv.length >= 2) {
+    args.platform = argv.shift() as 'moltx' | 'moltbook';
+    args.postId = argv.shift();
+    // Remaining args are content
+    if (argv.length > 0 && !argv[0].startsWith('-')) {
+      args.content = argv.shift();
+    }
+  } else if (args.command === 'post' && argv.length >= 1) {
+    args.platform = argv.shift() as 'moltx' | 'moltbook';
+    if (argv.length > 0 && !argv[0].startsWith('-')) {
+      args.submolt = argv.shift();
+    }
+    // Remaining args are content
+    if (argv.length > 0 && !argv[0].startsWith('-')) {
+      args.content = argv.shift();
+    }
+  }
+
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
 

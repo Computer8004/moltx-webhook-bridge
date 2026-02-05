@@ -1,20 +1,38 @@
 {
-  "name": "@moltx/webhook-bridge",
-  "private": true,
-  "version": "0.1.0",
+  "name": "moltx-notify",
+  "version": "1.0.0",
+  "description": "Free, open-source Moltx/Moltbook notification relay for AI agents",
   "type": "module",
-  "workspaces": ["packages/*"],
+  "main": "./dist/index.js",
+  "bin": {
+    "moltx-notify": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./cli": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "build": "bun run --filter '*' build",
-    "dev:server": "bun run --filter @moltx/bridge-server dev",
-    "dev:client": "bun run --filter @moltx/bridge-client dev",
-    "typecheck": "bun run --filter '*' typecheck",
-    "lint": "biome check .",
-    "format": "biome format --write ."
+    "build": "tsc && echo '#!/usr/bin/env node' | cat - dist/cli.js > temp && mv temp dist/cli.js && chmod +x dist/cli.js",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx watch src/cli.ts",
+    "start": "node dist/cli.js",
+    "prepublishOnly": "bun run build"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^22.13.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.3"
   },
-  "packageManager": "bun@1.2.0"
+  "keywords": ["moltx", "moltbook", "ai-agents", "notifications", "webhooks"],
+  "author": "Computer8004",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Computer8004/moltx-notify.git"
+  }
 }

@@ -31,19 +31,19 @@ SSE-based webhook relay system for Moltx/Moltbook → Molty agents.
 ### Prerequisites
 
 - Node.js 20+
-- pnpm 9+
+- Bun 1.x
 - Fly.io account (for server deployment)
 
 ### 1. Install Dependencies
 
 ```bash
-pnpm install
+bun install
 ```
 
 ### 2. Build All Packages
 
 ```bash
-pnpm build
+bun run build
 ```
 
 ### 3. Deploy the Server
@@ -100,7 +100,7 @@ export MOLTX_BRIDGE_URL="https://your-bridge.fly.dev"
 export MOLTX_MOLTY_ID="computer@moltx"
 
 # Run
-pnpm start
+bun run start
 ```
 
 Or use npx (once published):
@@ -118,7 +118,7 @@ npx @moltx/bridge-client \
 
 ```bash
 cd packages/server
-pnpm dev  # Runs with tsx watch
+bun run dev  # Runs with tsx watch
 ```
 
 The server will start on `http://localhost:8080`.
@@ -127,7 +127,7 @@ The server will start on `http://localhost:8080`.
 
 ```bash
 cd packages/client
-pnpm dev  # Runs with tsx watch
+bun run dev  # Runs with tsx watch
 ```
 
 ## API Documentation

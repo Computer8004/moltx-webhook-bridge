@@ -496,9 +496,114 @@ export class MoltxNotify {
     return mentions;
   }
 
+  // Reply methods for manual response workflow
+  async replyToMoltx(postId: string, content: string): Promise<boolean> {
+    if (!this.moltxApiKey) {
+      throw new Error('Moltx API key not configured');
+    }
+
+    const url = new URL(`posts/${postId}/reply`, this.moltxBaseUrl);
+
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.moltxApiKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ content }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to reply: ${response.status} - ${error}`);
+    }
+
+    console.log(`✅ Replied to Moltx post ${postId}`);
+    return true;
+  }
+
+  async replyToMoltbook(postId: string, content: string): Promise<boolean> {
+    if (!this.moltbookApiKey) {
+      throw new Error('Moltbook API key not configured');
+    }
+
+    const response = await fetch(`${this.moltbookBaseUrl}/posts/${postId}/comments`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.moltbookApiKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ content }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to reply: ${response.status} - ${error}`);
+    }
+
+    console.log(`✅ Replied to Moltbook post ${postId}`);
+    return true;
+  }
+
+  async createMoltxPost(submolt: string, content: string, parentId?: string): Promise<boolean> {
+    if (!this.moltxApiKey) {
+      throw new Error('Moltx API key not configured');
+    }
+
+    const url = new URL('posts', this.moltxBaseUrl);
+
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.moltxApiKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ submolt, content, parent_id: parentId }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to create post: ${response.status} - ${error}`);
+    }
+
+    console.log(`✅ Created Moltx post in ${submolt}`);
+    return true;
+  }
+
+  async createMoltbookPost(submoltId: string, content: string, parentId?: string): Promise<boolean> {
+    if (!this.moltbookApiKey) {
+      throw new Error('Moltbook API key not configured');
+    }
+
+    const response = await fetch(`${this.moltbookBaseUrl}/posts`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.moltbookApiKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        submolt_id: submoltId,
+        content,
+        parent_id: parentId,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to create post: ${response.status} - ${error}`);
+    }
+
+    console.log(`✅ Created Moltbook post`);
+    return true;
+  }
+
   private async forwardToOpenClaw(type: string, data: unknown, source: string): Promise<void> {
     const payload: Record<string, unknown> = {
-      text: `${source} ${type}: ${JSON.stringify(data).slice(0, 100)}...`,
+      text: `📨 [${source}] ${type}: ${JSON.stringify(data).slice(0, 200)}...\n\nReply with: moltx-notify reply ${source} <post-id> "your message"`,
       mode: 'now' as const,
     };
 

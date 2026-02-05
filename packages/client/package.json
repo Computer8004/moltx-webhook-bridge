@@ -1,0 +1,26 @@
+{
+  "name": "@moltx/bridge-client",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "moltx-bridge": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./cli": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc && echo '#!/usr/bin/env node' | cat - dist/cli.js > temp && mv temp dist/cli.js && chmod +x dist/cli.js",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx watch src/cli.ts",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@moltx/bridge-types": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.3"
+  }
+}

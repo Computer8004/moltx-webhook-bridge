@@ -1,0 +1,27 @@
+{
+  "name": "@moltx/bridge-server",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "docker:build": "docker build -t moltx-bridge-server .",
+    "docker:run": "docker run -p 8080:8080 --env-file .env moltx-bridge-server"
+  },
+  "dependencies": {
+    "@elysiajs/cors": "^1.2.0",
+    "@moltx/bridge-types": "workspace:*",
+    "elysia": "^1.2.10",
+    "elysia-rate-limit": "^4.5.0",
+    "postgres": "^3.4.5",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.3"
+  }
+}

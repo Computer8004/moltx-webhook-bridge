@@ -1,6 +1,12 @@
 // Moltx Notify - Free notification relay for AI agents
 // Supports both Moltx (moltx.io) and Moltbook (moltbook.com)
 
+// Rate limits (conservative defaults)
+const DEFAULT_POLL_INTERVAL_MS = 60000; // 60 seconds - safe for both platforms
+const MOLTBOOK_RATE_LIMIT = 100; // 100 req/min for moltbook.com
+const MOLTX_RATE_LIMIT = 600; // 600 req/min for moltx.io (claimed agents)
+const JITTER_MAX_MS = 5000; // Add up to 5s random jitter
+
 export interface MoltxNotification {
   id: string;
   type: 'mention' | 'reply' | 'follow' | 'upvote' | 'system';
@@ -38,6 +44,7 @@ export interface NotifyConfig {
   pollIntervalMs?: number;
   openclawUrl?: string;
   openclawToken?: string;
+  enableJitter?: boolean; // Add random delay to prevent thundering herd
 }
 
 export class MoltxNotify {
@@ -48,6 +55,7 @@ export class MoltxNotify {
   private pollIntervalMs: number;
   private openclawUrl: string;
   private openclawToken: string;
+  private enableJitter: boolean;
   private isRunning = false;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private abortController: AbortController | null = null;
@@ -56,6 +64,12 @@ export class MoltxNotify {
   private onNotification?: (n: MoltxNotification) => void;
   private onMention?: (m: MoltxMention) => void;
   private onError?: (e: Error) => void;
+  
+  // Rate limit tracking
+  private moltxRequestCount = 0;
+  private moltxWindowStart = Date.now();
+  private moltbookRequestCount = 0;
+  private moltbookWindowStart = Date.now();
 
   constructor(config: NotifyConfig & {
     onNotification?: (n: MoltxNotification) => void;
@@ -66,12 +80,20 @@ export class MoltxNotify {
     this.moltxBaseUrl = (config.moltxBaseUrl ?? 'https://moltx.io/api').replace(/\/$/, '');
     this.moltbookApiKey = config.moltbookApiKey;
     this.moltbookBaseUrl = (config.moltbookBaseUrl ?? 'https://www.moltbook.com/api/v1').replace(/\/$/, '');
-    this.pollIntervalMs = config.pollIntervalMs ?? 30000;
+    this.pollIntervalMs = config.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this.openclawUrl = (config.openclawUrl ?? 'http://localhost:18789/hooks').replace(/\/$/, '');
     this.openclawToken = config.openclawToken ?? '';
+    this.enableJitter = config.enableJitter ?? true;
     this.onNotification = config.onNotification;
     this.onMention = config.onMention;
     this.onError = config.onError;
+    
+    // Validate poll interval is safe
+    if (this.pollIntervalMs < 30000) {
+      console.warn(`[moltx-notify] Poll interval ${this.pollIntervalMs}ms is very aggressive.`);
+      console.warn(`                   Moltbook allows 100 req/min. 30s interval = 2 req/min per endpoint.`);
+      console.warn(`                   Consider increasing to 60s+ for safety.`);
+    }
   }
 
   async start(): Promise<void> {
@@ -82,6 +104,7 @@ export class MoltxNotify {
     }
     
     console.log('🦀 Moltx Notify starting...');
+    console.log(`   Poll interval: ${this.pollIntervalMs}ms`);
     if (this.moltxApiKey) console.log(`   Moltx: ${this.moltxBaseUrl}`);
     if (this.moltbookApiKey) console.log(`   Moltbook: ${this.moltbookBaseUrl}`);
     console.log(`   Forwarding to: ${this.openclawUrl}`);
@@ -89,17 +112,17 @@ export class MoltxNotify {
     this.isRunning = true;
     this.abortController = new AbortController();
     
-    // Initial poll
-    await this.poll();
+    // Initial poll with jitter
+    await this.pollWithJitter();
     
     // Start polling loop
     this.pollTimer = setInterval(() => {
       if (this.isRunning) {
-        this.poll().catch(err => this.onError?.(err));
+        this.pollWithJitter().catch(err => this.onError?.(err));
       }
     }, this.pollIntervalMs);
     
-    console.log(`✅ Started polling every ${this.pollIntervalMs}ms`);
+    console.log(`✅ Started polling (rate limit safe: ${Math.ceil(60000 / this.pollIntervalMs)} req/min max)`);
   }
 
   stop(): void {
@@ -110,6 +133,16 @@ export class MoltxNotify {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
+  }
+
+  private async pollWithJitter(): Promise<void> {
+    // Add random jitter to prevent thundering herd
+    if (this.enableJitter) {
+      const jitter = Math.random() * JITTER_MAX_MS;
+      await new Promise(resolve => setTimeout(resolve, jitter));
+    }
+    
+    return this.poll();
   }
 
   private async poll(): Promise<void> {
@@ -133,8 +166,15 @@ export class MoltxNotify {
     const since = this.lastMoltxCheck.toISOString();
     
     try {
+      // Check rate limit before making requests
+      if (!this.checkMoltxRateLimit()) {
+        console.warn('[moltx.io] Rate limit approaching, skipping this poll');
+        return;
+      }
+      
       // Fetch notifications from Moltx
       const notifications = await this.fetchMoltxNotifications(since);
+      this.moltxRequestCount++;
       for (const notification of notifications) {
         if (!notification.read) {
           const n: MoltxNotification = { ...notification, source: 'moltx' };
@@ -143,8 +183,16 @@ export class MoltxNotify {
         }
       }
       
+      // Check rate limit before mentions
+      if (!this.checkMoltxRateLimit()) {
+        console.warn('[moltx.io] Rate limit approaching, skipping mentions fetch');
+        this.lastMoltxCheck = new Date();
+        return;
+      }
+      
       // Fetch mentions from Moltx
       const mentions = await this.fetchMoltxMentions(since);
+      this.moltxRequestCount++;
       for (const mention of mentions) {
         const m: MoltxMention = { ...mention, source: 'moltx' };
         this.onMention?.(m);
@@ -153,6 +201,10 @@ export class MoltxNotify {
       
       this.lastMoltxCheck = new Date();
     } catch (err) {
+      if (this.isRateLimitError(err)) {
+        console.error('[moltx.io] Rate limited (429). Will retry next poll.');
+        return;
+      }
       console.error('[moltx.io] Poll error:', err);
     }
   }
@@ -161,8 +213,15 @@ export class MoltxNotify {
     const since = this.lastMoltbookCheck.toISOString();
     
     try {
+      // Check rate limit before making requests
+      if (!this.checkMoltbookRateLimit()) {
+        console.warn('[moltbook.com] Rate limit approaching (100/min), skipping this poll');
+        return;
+      }
+      
       // Fetch notifications from Moltbook
       const notifications = await this.fetchMoltbookNotifications(since);
+      this.moltbookRequestCount++;
       for (const notification of notifications) {
         if (!notification.read) {
           const n: MoltxNotification = { ...notification, source: 'moltbook' };
@@ -171,8 +230,16 @@ export class MoltxNotify {
         }
       }
       
+      // Check rate limit before mentions
+      if (!this.checkMoltbookRateLimit()) {
+        console.warn('[moltbook.com] Rate limit approaching, skipping mentions fetch');
+        this.lastMoltbookCheck = new Date();
+        return;
+      }
+      
       // Fetch mentions from Moltbook
       const mentions = await this.fetchMoltbookMentions(since);
+      this.moltbookRequestCount++;
       for (const mention of mentions) {
         const m: MoltxMention = { ...mention, source: 'moltbook' };
         this.onMention?.(m);
@@ -181,8 +248,45 @@ export class MoltxNotify {
       
       this.lastMoltbookCheck = new Date();
     } catch (err) {
+      if (this.isRateLimitError(err)) {
+        console.error('[moltbook.com] Rate limited (429). Will retry next poll.');
+        return;
+      }
       console.error('[moltbook.com] Poll error:', err);
     }
+  }
+
+  private checkMoltxRateLimit(): boolean {
+    const now = Date.now();
+    const windowMs = 60000; // 1 minute
+    
+    // Reset window
+    if (now - this.moltxWindowStart > windowMs) {
+      this.moltxWindowStart = now;
+      this.moltxRequestCount = 0;
+    }
+    
+    // Leave 20% buffer (conservative: 480 req/min instead of 600)
+    return this.moltxRequestCount < (MOLTX_RATE_LIMIT * 0.8);
+  }
+
+  private checkMoltbookRateLimit(): boolean {
+    const now = Date.now();
+    const windowMs = 60000; // 1 minute
+    
+    // Reset window
+    if (now - this.moltbookWindowStart > windowMs) {
+      this.moltbookWindowStart = now;
+      this.moltbookRequestCount = 0;
+    }
+    
+    // Leave 20% buffer (conservative: 80 req/min instead of 100)
+    return this.moltbookRequestCount < (MOLTBOOK_RATE_LIMIT * 0.8);
+  }
+
+  private isRateLimitError(err: unknown): boolean {
+    return err instanceof Error && 
+           (err.message.includes('429') || err.message.includes('rate limit'));
   }
 
   private async fetchMoltxNotifications(since?: string): Promise<Omit<MoltxNotification, 'source'>[]> {
@@ -196,6 +300,10 @@ export class MoltxNotify {
       },
       signal: this.abortController?.signal,
     });
+    
+    if (response.status === 429) {
+      throw new Error('429 Rate limited');
+    }
     
     if (!response.ok) {
       throw new Error(`Moltx API error: ${response.status}`);
@@ -216,6 +324,10 @@ export class MoltxNotify {
       signal: this.abortController?.signal,
     });
     
+    if (response.status === 429) {
+      throw new Error('429 Rate limited');
+    }
+    
     if (!response.ok) {
       throw new Error(`Moltx API error: ${response.status}`);
     }
@@ -235,6 +347,10 @@ export class MoltxNotify {
       signal: this.abortController?.signal,
     });
     
+    if (response.status === 429) {
+      throw new Error('429 Rate limited');
+    }
+    
     if (!response.ok) {
       throw new Error(`Moltbook API error: ${response.status}`);
     }
@@ -253,6 +369,10 @@ export class MoltxNotify {
       },
       signal: this.abortController?.signal,
     });
+    
+    if (response.status === 429) {
+      throw new Error('429 Rate limited');
+    }
     
     if (!response.ok) {
       throw new Error(`Moltbook API error: ${response.status}`);

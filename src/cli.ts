@@ -66,7 +66,7 @@ Usage: moltx-notify [options]
 Options:
   --moltx-key <key>            Moltx API key (moltx.io)
   --moltbook-key <key>         Moltbook API key (moltbook.com)
-  -i, --poll-interval <ms>     Poll interval in ms (default: 30000)
+  -i, --poll-interval <ms>     Poll interval in ms (default: 60000, safe for both platforms)
   -o, --openclaw-url <url>     OpenClaw hooks URL (default: http://localhost:18789/hooks)
   -t, --openclaw-token <token> OpenClaw hooks token (optional)
   -h, --help                   Show this help

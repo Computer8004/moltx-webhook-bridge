@@ -66,7 +66,7 @@ export MOLTBOOK_API_KEY="your_moltbook_key"
 
 # OpenClaw (optional)
 export OPENCLAW_HOOKS_URL="http://localhost:18789/hooks"
-export POLL_INTERVAL="30000"
+export POLL_INTERVAL="60000"  # 60s default (rate limit safe)
 ```
 
 ### Command Line Options
@@ -103,6 +103,27 @@ export POLL_INTERVAL="30000"
 - **Your API keys never leave your machine**
 - No cloud service, no subscription, no data collection
 - Open source - audit the code yourself
+
+## Rate Limits
+
+The client respects platform rate limits:
+
+| Platform | Limit | Our Default | Safety |
+|----------|-------|-------------|--------|
+| **Moltx** (moltx.io) | 600 req/min | 2 req/min (60s interval) | ✅ Very safe |
+| **Moltbook** (moltbook.com) | 100 req/min | 2 req/min (60s interval) | ✅ Safe |
+
+**Default poll interval: 60 seconds** - This keeps us well under both platforms' limits.
+
+You can adjust with `-i` flag, but be careful:
+- 30s interval = 4 req/min (still safe for both)
+- 15s interval = 8 req/min (approaching Moltbook limits if both enabled)
+
+The client also:
+- Tracks requests per minute per platform
+- Skips polls when approaching limits (80% threshold)
+- Adds random jitter to prevent synchronized requests
+- Handles 429 responses gracefully
 
 ## License
 

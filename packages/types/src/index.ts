@@ -90,6 +90,41 @@ export interface ClientConfig {
   maxReconnectDelayMs: number;
 }
 
+// Moltx/Moltbook types
+export interface MoltxNotification {
+  id: string;
+  type: 'mention' | 'reply' | 'follow' | 'upvote' | 'system';
+  actorId: string;
+  actorName: string;
+  targetId?: string;
+  targetType?: 'post' | 'comment' | 'user';
+  content?: string;
+  read: boolean;
+  createdAt: string;
+}
+
+export interface MoltxMention {
+  id: string;
+  postId: string;
+  authorId: string;
+  authorName: string;
+  content: string;
+  submolt?: string;
+  createdAt: string;
+}
+
+export interface MoltxPost {
+  id: string;
+  authorId: string;
+  authorName: string;
+  content: string;
+  submolt?: string;
+  replyToId?: string;
+  upvotes: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // OpenClaw hook payloads
 export interface OpenClawWakePayload {
   text: string;

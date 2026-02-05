@@ -1,10 +1,11 @@
 import { cors } from '@elysiajs/cors';
-import type { WebhookPayload } from '@moltx/bridge-types';
+import type { MoltxMention, MoltxNotification, WebhookPayload } from '@moltx/bridge-types';
 import { Elysia } from 'elysia';
 import { rateLimit } from 'elysia-rate-limit';
 import { z } from 'zod';
 import * as connections from './connections/manager.js';
 import * as db from './db/index.js';
+import { createMoltxClient } from './moltx/client.js';
 import { getPaymentRequirements, verifyX402Payment } from './payments/x402.js';
 
 const MOLTX_API_KEY = process.env.MOLTX_API_KEY;
@@ -458,18 +459,76 @@ setInterval(
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('[server] SIGTERM received, closing connections...');
+  moltxClient?.stop();
   connections.closeAll();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   console.log('[server] SIGINT received, closing connections...');
+  moltxClient?.stop();
   connections.closeAll();
   process.exit(0);
 });
+
+// Initialize Moltx client for polling (if API key is configured)
+const MOLTBOOK_API_KEY = process.env.MOLTBOOK_API_KEY;
+let moltxClient: ReturnType<typeof createMoltxClient> | null = null;
+
+if (MOLTBOOK_API_KEY) {
+  moltxClient = createMoltxClient({
+    apiKey: MOLTBOOK_API_KEY,
+    onNotification: async (notification: MoltxNotification) => {
+      // Forward to all connected moltys (or specific ones based on notification)
+      console.log(`[moltx] Notification: ${notification.type} from ${notification.actorName}`);
+      
+      // For now, broadcast to all connected clients
+      // In production, you might want to route based on moltyId
+      const stats = connections.getStats();
+      for (const moltyId of stats.moltyIds) {
+        const payload: WebhookPayload = {
+          id: crypto.randomUUID(),
+          source: 'moltx',
+          event: `notification.${notification.type}`,
+          timestamp: new Date().toISOString(),
+          data: notification,
+        };
+        connections.sendEvent(moltyId, 'webhook', payload);
+      }
+    },
+    onMention: async (mention: MoltxMention) => {
+      console.log(`[moltx] Mention from ${mention.authorName}`);
+      
+      // Forward to all connected moltys
+      const stats = connections.getStats();
+      for (const moltyId of stats.moltyIds) {
+        const payload: WebhookPayload = {
+          id: crypto.randomUUID(),
+          source: 'moltx',
+          event: 'mention.received',
+          timestamp: new Date().toISOString(),
+          data: mention,
+        };
+        connections.sendEvent(moltyId, 'webhook', payload);
+      }
+    },
+    onError: (err: Error) => {
+      console.error('[moltx] Client error:', err.message);
+    },
+  });
+
+  // Start polling
+  moltxClient.start(30000).catch((err) => {
+    console.error('[moltx] Failed to start client:', err);
+  });
+} else {
+  console.log('[moltx] MOLTBOOK_API_KEY not set - Moltx polling disabled');
+  console.log('        Set MOLTBOOK_API_KEY to enable automatic webhook delivery from Moltx');
+}
 
 // Start server
 app.listen(PORT);
 
 console.log(`🦀 Moltx Webhook Bridge Server running on port ${PORT}`);
 console.log(`   Health check: http://localhost:${PORT}/health`);
+console.log(`   Moltx polling: ${MOLTBOOK_API_KEY ? 'enabled' : 'disabled'}`);

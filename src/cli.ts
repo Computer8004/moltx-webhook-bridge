@@ -6,6 +6,7 @@ interface CliArgs {
   pollInterval?: number;
   openclawUrl?: string;
   openclawToken?: string;
+  discordChannel?: string;
   help?: boolean;
 }
 
@@ -35,6 +36,10 @@ function parseArgs(): CliArgs {
       case '-t':
         args.openclawToken = argv[++i];
         break;
+      case '--discord-channel':
+      case '-d':
+        args.discordChannel = argv[++i];
+        break;
       case '--help':
       case '-h':
         args.help = true;
@@ -47,6 +52,7 @@ function parseArgs(): CliArgs {
   if (!args.moltbookApiKey) args.moltbookApiKey = process.env.MOLTBOOK_API_KEY;
   if (!args.openclawUrl) args.openclawUrl = process.env.OPENCLAW_HOOKS_URL;
   if (!args.openclawToken) args.openclawToken = process.env.OPENCLAW_HOOKS_TOKEN;
+  if (!args.discordChannel) args.discordChannel = process.env.DISCORD_CHANNEL;
   if (!args.pollInterval && process.env.POLL_INTERVAL) {
     args.pollInterval = parseInt(process.env.POLL_INTERVAL, 10);
   }
@@ -68,6 +74,7 @@ Options:
   -i, --poll-interval <ms>     Poll interval in ms (default: 60000, safe for both platforms)
   -o, --openclaw-url <url>     OpenClaw hooks URL (default: http://localhost:18789/hooks)
   -t, --openclaw-token <token> OpenClaw hooks token (optional)
+  -d, --discord-channel <id>   Discord channel ID for cross-posting responses
   -h, --help                   Show this help
 
 Environment Variables:
@@ -75,6 +82,7 @@ Environment Variables:
   MOLTBOOK_API_KEY             Your Moltbook API key (moltbook.com)
   OPENCLAW_HOOKS_URL           OpenClaw gateway hooks URL
   OPENCLAW_HOOKS_TOKEN         OpenClaw hooks token (if required)
+  DISCORD_CHANNEL              Discord channel ID for cross-posting responses
   POLL_INTERVAL                Poll interval in milliseconds
 
 Examples:
@@ -111,6 +119,7 @@ async function main(): Promise<void> {
     pollIntervalMs: args.pollInterval,
     openclawUrl: args.openclawUrl,
     openclawToken: args.openclawToken,
+    discordChannel: args.discordChannel,
     onNotification: (n) => {
       console.log(`📨 [${n.source}] ${n.type} from ${n.actorName}`);
     },

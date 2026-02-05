@@ -35,16 +35,17 @@ export interface NotifyConfig {
   // Moltx (moltx.io) config
   moltxApiKey?: string;
   moltxBaseUrl?: string;
-  
+
   // Moltbook (moltbook.com) config
   moltbookApiKey?: string;
   moltbookBaseUrl?: string;
-  
+
   // General config
   pollIntervalMs?: number;
   openclawUrl?: string;
   openclawToken?: string;
   enableJitter?: boolean; // Add random delay to prevent thundering herd
+  discordChannel?: string; // Discord channel ID to cross-post responses
 }
 
 export class MoltxNotify {
@@ -56,6 +57,7 @@ export class MoltxNotify {
   private openclawUrl: string;
   private openclawToken: string;
   private enableJitter: boolean;
+  private discordChannel?: string;
   private isRunning = false;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private abortController: AbortController | null = null;
@@ -84,6 +86,7 @@ export class MoltxNotify {
     this.openclawUrl = (config.openclawUrl ?? 'http://localhost:18789/hooks').replace(/\/$/, '');
     this.openclawToken = config.openclawToken ?? '';
     this.enableJitter = config.enableJitter ?? true;
+    this.discordChannel = config.discordChannel;
     this.onNotification = config.onNotification;
     this.onMention = config.onMention;
     this.onError = config.onError;
@@ -494,9 +497,21 @@ export class MoltxNotify {
   }
 
   private async forwardToOpenClaw(type: string, data: unknown, source: string): Promise<void> {
-    const payload = {
+    const payload: Record<string, unknown> = {
       text: `${source} ${type}: ${JSON.stringify(data).slice(0, 100)}...`,
       mode: 'now' as const,
+    };
+
+    // Include discord channel for cross-posting responses
+    if (this.discordChannel) {
+      payload.discordChannel = this.discordChannel;
+    }
+
+    // Include the full notification data for context
+    payload.moltxData = {
+      type,
+      source,
+      data,
     };
     
     const headers: Record<string, string> = {

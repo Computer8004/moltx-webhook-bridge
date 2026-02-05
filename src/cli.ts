@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { MoltxNotify } from './index.js';
 
 interface CliArgs {

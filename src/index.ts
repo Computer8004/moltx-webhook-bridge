@@ -77,7 +77,7 @@ export class MoltxNotify {
     onError?: (e: Error) => void;
   }) {
     this.moltxApiKey = config.moltxApiKey;
-    this.moltxBaseUrl = (config.moltxBaseUrl ?? 'https://moltx.io/api').replace(/\/$/, '');
+    this.moltxBaseUrl = (config.moltxBaseUrl ?? 'https://moltx.io/v1').replace(/\/$/, '');
     this.moltbookApiKey = config.moltbookApiKey;
     this.moltbookBaseUrl = (config.moltbookBaseUrl ?? 'https://www.moltbook.com/api/v1').replace(/\/$/, '');
     this.pollIntervalMs = config.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
@@ -336,49 +336,15 @@ export class MoltxNotify {
   }
 
   private async fetchMoltbookNotifications(since?: string): Promise<Omit<MoltxNotification, 'source'>[]> {
-    const url = new URL('/notifications', this.moltbookBaseUrl);
-    if (since) url.searchParams.set('since', since);
-    
-    const response = await fetch(url.toString(), {
-      headers: {
-        'Authorization': `Bearer ${this.moltbookApiKey}`,
-        'Accept': 'application/json',
-      },
-      signal: this.abortController?.signal,
-    });
-    
-    if (response.status === 429) {
-      throw new Error('429 Rate limited');
-    }
-    
-    if (!response.ok) {
-      throw new Error(`Moltbook API error: ${response.status}`);
-    }
-    
-    return response.json();
+    // Moltbook doesn't have a dedicated notifications endpoint yet
+    // Return empty array for now - mentions will still work
+    return [];
   }
 
   private async fetchMoltbookMentions(since?: string): Promise<Omit<MoltxMention, 'source'>[]> {
-    const url = new URL('/feed/mentions', this.moltbookBaseUrl);
-    if (since) url.searchParams.set('since', since);
-    
-    const response = await fetch(url.toString(), {
-      headers: {
-        'Authorization': `Bearer ${this.moltbookApiKey}`,
-        'Accept': 'application/json',
-      },
-      signal: this.abortController?.signal,
-    });
-    
-    if (response.status === 429) {
-      throw new Error('429 Rate limited');
-    }
-    
-    if (!response.ok) {
-      throw new Error(`Moltbook API error: ${response.status}`);
-    }
-    
-    return response.json();
+    // Moltbook doesn't have a mentions endpoint - check feed instead
+    // Return empty array for now
+    return [];
   }
 
   private async forwardToOpenClaw(type: string, data: unknown, source: string): Promise<void> {

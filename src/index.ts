@@ -77,9 +77,9 @@ export class MoltxNotify {
     onError?: (e: Error) => void;
   }) {
     this.moltxApiKey = config.moltxApiKey;
-    this.moltxBaseUrl = (config.moltxBaseUrl ?? 'https://moltx.io/v1').replace(/\/$/, '');
+    this.moltxBaseUrl = (config.moltxBaseUrl ?? 'https://moltx.io/v1').replace(/\/?$/, '/');
     this.moltbookApiKey = config.moltbookApiKey;
-    this.moltbookBaseUrl = (config.moltbookBaseUrl ?? 'https://www.moltbook.com/api/v1').replace(/\/$/, '');
+    this.moltbookBaseUrl = (config.moltbookBaseUrl ?? 'https://www.moltbook.com/api/v1').replace(/\/?$/, '/');
     this.pollIntervalMs = config.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this.openclawUrl = (config.openclawUrl ?? 'http://localhost:18789/hooks').replace(/\/$/, '');
     this.openclawToken = config.openclawToken ?? '';
@@ -290,7 +290,7 @@ export class MoltxNotify {
   }
 
   private async fetchMoltxNotifications(since?: string): Promise<Omit<MoltxNotification, 'source'>[]> {
-    const url = new URL('/notifications', this.moltxBaseUrl);
+    const url = new URL('notifications', this.moltxBaseUrl);
     if (since) url.searchParams.set('since', since);
     
     const response = await fetch(url.toString(), {
@@ -309,11 +309,12 @@ export class MoltxNotify {
       throw new Error(`Moltx API error: ${response.status}`);
     }
     
-    return response.json();
+    const data = await response.json();
+    return data.data?.notifications || [];
   }
 
   private async fetchMoltxMentions(since?: string): Promise<Omit<MoltxMention, 'source'>[]> {
-    const url = new URL('/mentions', this.moltxBaseUrl);
+    const url = new URL('feed/mentions', this.moltxBaseUrl);
     if (since) url.searchParams.set('since', since);
     
     const response = await fetch(url.toString(), {
@@ -332,19 +333,164 @@ export class MoltxNotify {
       throw new Error(`Moltx API error: ${response.status}`);
     }
     
-    return response.json();
+    const data = await response.json();
+    return data.data?.posts || [];
   }
+
+  private lastMoltbookProfile: { postCount: number; karma: number; commentCount: number } | null = null;
 
   private async fetchMoltbookNotifications(since?: string): Promise<Omit<MoltxNotification, 'source'>[]> {
-    // Moltbook doesn't have a dedicated notifications endpoint yet
-    // Return empty array for now - mentions will still work
-    return [];
+    // Moltbook doesn't have a notifications endpoint
+    // Track by polling profile and detecting changes
+    const notifications: Omit<MoltxNotification, 'source'>[] = [];
+    
+    try {
+      const profile = await this.fetchMoltbookProfile();
+      
+      if (this.lastMoltbookProfile) {
+        // Detect new posts
+        if (profile.postCount > this.lastMoltbookProfile.postCount) {
+          const newPosts = profile.postCount - this.lastMoltbookProfile.postCount;
+          notifications.push({
+            id: `moltbook-post-${Date.now()}`,
+            type: 'system',
+            actorId: 'self',
+            actorName: 'You',
+            content: `Your post count increased by ${newPosts}`,
+            read: false,
+            createdAt: new Date().toISOString(),
+          });
+        }
+        
+        // Detect karma changes (upvotes/downvotes)
+        if (profile.karma > this.lastMoltbookProfile.karma) {
+          const karmaGain = profile.karma - this.lastMoltbookProfile.karma;
+          notifications.push({
+            id: `moltbook-karma-${Date.now()}`,
+            type: 'upvote',
+            actorId: 'unknown',
+            actorName: 'Someone',
+            content: `+${karmaGain} karma from upvotes`,
+            read: false,
+            createdAt: new Date().toISOString(),
+          });
+        }
+        
+        // Detect new comments
+        if (profile.commentCount > this.lastMoltbookProfile.commentCount) {
+          const newComments = profile.commentCount - this.lastMoltbookProfile.commentCount;
+          notifications.push({
+            id: `moltbook-comment-${Date.now()}`,
+            type: 'reply',
+            actorId: 'unknown',
+            actorName: 'Someone',
+            content: `${newComments} new comment(s) on your posts`,
+            read: false,
+            createdAt: new Date().toISOString(),
+          });
+        }
+      }
+      
+      this.lastMoltbookProfile = profile;
+    } catch (err) {
+      console.error('[moltbook.com] Profile fetch error:', err);
+    }
+    
+    return notifications;
+  }
+  
+  private async fetchMoltbookProfile(): Promise<{ postCount: number; karma: number; commentCount: number }> {
+    const response = await fetch(`${this.moltbookBaseUrl}/agents/me`, {
+      headers: {
+        'Authorization': `Bearer ${this.moltbookApiKey}`,
+        'Accept': 'application/json',
+      },
+      signal: this.abortController?.signal,
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Moltbook API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return {
+      postCount: data.agent?.post_count || 0,
+      karma: data.agent?.karma || 0,
+      commentCount: data.agent?.comment_count || 0,
+    };
   }
 
+  private lastSeenMoltbookPostIds = new Set<string>();
+
   private async fetchMoltbookMentions(since?: string): Promise<Omit<MoltxMention, 'source'>[]> {
-    // Moltbook doesn't have a mentions endpoint - check feed instead
-    // Return empty array for now
-    return [];
+    // Moltbook doesn't have a mentions endpoint
+    // Search feed for posts mentioning us
+    const mentions: Omit<MoltxMention, 'source'>[] = [];
+    
+    try {
+      // Get my profile to find my name
+      const meResponse = await fetch(`${this.moltbookBaseUrl}/agents/me`, {
+        headers: {
+          'Authorization': `Bearer ${this.moltbookApiKey}`,
+          'Accept': 'application/json',
+        },
+        signal: this.abortController?.signal,
+      });
+      
+      if (!meResponse.ok) return [];
+      const meData = await meResponse.json();
+      const myName = meData.agent?.name;
+      
+      if (!myName) return [];
+      
+      // Search for posts mentioning us
+      const searchResponse = await fetch(
+        `${this.moltbookBaseUrl}/search?q=${encodeURIComponent('@' + myName)}&type=posts&limit=20`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.moltbookApiKey}`,
+            'Accept': 'application/json',
+          },
+          signal: this.abortController?.signal,
+        }
+      );
+      
+      if (!searchResponse.ok) return [];
+      const searchData = await searchResponse.json();
+      
+      for (const result of searchData.results || []) {
+        // Skip if we've seen this before
+        if (this.lastSeenMoltbookPostIds.has(result.id)) continue;
+        
+        // Check if content actually mentions us
+        if (result.content?.includes('@' + myName)) {
+          mentions.push({
+            id: result.id,
+            postId: result.post_id || result.id,
+            authorId: result.author?.id || 'unknown',
+            authorName: result.author?.name || 'Unknown',
+            content: result.content.slice(0, 200),
+            submolt: result.submolt?.name,
+            createdAt: result.created_at,
+          });
+          this.lastSeenMoltbookPostIds.add(result.id);
+        }
+      }
+      
+      // Keep set size manageable
+      if (this.lastSeenMoltbookPostIds.size > 100) {
+        const toDelete = this.lastSeenMoltbookPostIds.size - 100;
+        const iter = this.lastSeenMoltbookPostIds.values();
+        for (let i = 0; i < toDelete; i++) {
+          const value = iter.next().value;
+          if (value) this.lastSeenMoltbookPostIds.delete(value);
+        }
+      }
+    } catch (err) {
+      console.error('[moltbook.com] Search error:', err);
+    }
+    
+    return mentions;
   }
 
   private async forwardToOpenClaw(type: string, data: unknown, source: string): Promise<void> {

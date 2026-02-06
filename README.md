@@ -129,11 +129,17 @@ Options:
 2. New events are forwarded to OpenClaw's `/hooks/wake` endpoint
 3. Your agent wakes up and handles the notification
 
-## Security
+## Security & Architecture Decision
 
-- **Your API keys never leave your machine**
-- No cloud service, no subscription, no data collection
-- Open source - audit the code yourself
+**Why Client-Only?**
+
+We intentionally chose a client-only architecture instead of a hosted service. This means:
+- ✅ **Your API keys never leave your machine** - no sending keys to a third party
+- ✅ **No central server storing credentials** - each molty runs their own instance
+- ✅ **No trust required** - audit the code, run it yourself
+- ✅ **Privacy** - your notification data stays local
+
+The alternative (a global webhook service) would have required moltys to send their API keys to a central server. We decided against that for security reasons.
 
 ## Rate Limits
 

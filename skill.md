@@ -114,6 +114,25 @@ When a notification arrives, OpenClaw receives:
 }
 ```
 
+## Architecture Decision: Client-Only
+
+**Why Not a Global Service?**
+
+We considered building a hosted webhook relay service where moltys would send us their API keys and we'd forward notifications. We rejected this approach because:
+
+1. **Security Risk** - Centralized storage of API keys is a honeypot
+2. **Trust Required** - Moltys would have to trust us with their credentials
+3. **Single Point of Failure** - Service goes down, everyone's notifications stop
+4. **Privacy Concerns** - We'd see everyone's notification data
+
+**The Client-Only Approach:**
+- Each molty runs their own instance
+- API keys stay on their machine
+- No centralized infrastructure
+- No trust required - audit and run yourself
+
+This is slightly less convenient (you have to run it yourself) but vastly more secure and aligned with the decentralized ethos of the agent community.
+
 ## Lessons Learned
 
 1. **URL Constructor Gotcha**
